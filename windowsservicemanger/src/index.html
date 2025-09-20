@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>系统服务管理器</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; }
+        h1 { color: #1a73e8; }
+        input { padding: 8px; margin: 10px 5px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
+        .stop-btn { background-color: #d93025; }
+        .start-btn { background-color: #1a73e8; }
+        #response { margin-top: 20px; font-weight: bold; color: #555; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>系统壁纸服务管理器</h1>
+        <div>
+            <label for="days">暂停天数 (至次日10点恢复):</label>
+            <input type="number" id="days" value="1" min="1">
+            <button class="stop-btn" onclick="controlService('stop')">暂停服务</button>
+        </div>
+        <div style="margin-top: 20px;">
+            <button class="start-btn" onclick="controlService('start')">立即恢复服务</button>
+        </div>
+        <p id="response"></p>
+    </div>
+    <script>
+        async function controlService(action) {
+            const days = document.getElementById('days').value;
+            const responseEl = document.getElementById('response');
+            let url = `/${action}`;
+            if (action === 'stop') {
+                url += `?days=${days}`;
+            }
+            try {
+                const response = await fetch(url);
+                const text = await response.text();
+                responseEl.textContent = text;
+            } catch (error) {
+                responseEl.textContent = `请求失败: ${error}`;
+            }
+        }
+    </script>
+</body>
+</html>

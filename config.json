@@ -9,6 +9,9 @@
     "saturday": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/7.jpg",
     "sunday": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/7.jpg"
   },
+  "specific_date_wallpapers": {
+    "2025-10-01": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/special_national_day.jpg"
+  },
   "scheduled_wallpapers": [
     {
       "day": "monday",

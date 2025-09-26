@@ -7,10 +7,12 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tokio::{fs, time};
 use shared::*;
+
 #[derive(Deserialize, Debug)]
 struct WallpaperConfig {
     initial_run_time: Option<String>,
     wallpapers: HashMap<String, String>,
+    specific_date_wallpapers: Option<HashMap<String, String>>,
     scheduled_wallpapers: Option<Vec<ScheduledWallpaper>>,
 }
 
@@ -86,27 +88,42 @@ async fn run_wallpaper_logic() -> Result<()> {
     let now = Local::now();
     let current_time = now.time();
     let day_str = get_current_day_str();
+    let date_str = now.format("%Y-%m-%d").to_string();
+    
     let mut wallpaper_url_to_set = None;
-    if let Some(scheduled) = &config.scheduled_wallpapers {
-        for item in scheduled {
-            if item.day == day_str {
-                if let (Ok(start_time), Ok(end_time)) = (
-                    NaiveTime::parse_from_str(&item.start_time, "%H:%M"),
-                    NaiveTime::parse_from_str(&item.end_time, "%H:%M")
-                ) {
-                    if current_time >= start_time && current_time < end_time {
-                        info!(
-                            "plan: day={}, time_range={}-{}",
-                            item.day, item.start_time, item.end_time
-                        );
-                        wallpaper_url_to_set = Some(item.url.clone());
-                        break;
+    
+    // 检查是否有特定日期壁纸
+    if let Some(specific_date_wallpapers) = &config.specific_date_wallpapers {
+        if let Some(specific_wallpaper_url) = specific_date_wallpapers.get(&date_str) {
+            info!("使用特定日期壁纸: date={}, url={}", date_str, specific_wallpaper_url);
+            wallpaper_url_to_set = Some(specific_wallpaper_url.clone());
+        }
+    }
+    
+    // 如果没有特定日期壁纸，则检查计划壁纸
+    if wallpaper_url_to_set.is_none() {
+        if let Some(scheduled) = &config.scheduled_wallpapers {
+            for item in scheduled {
+                if item.day == day_str {
+                    if let (Ok(start_time), Ok(end_time)) = (
+                        NaiveTime::parse_from_str(&item.start_time, "%H:%M"),
+                        NaiveTime::parse_from_str(&item.end_time, "%H:%M")
+                    ) {
+                        if current_time >= start_time && current_time < end_time {
+                            info!(
+                                "plan: day={}, time_range={}-{}",
+                                item.day, item.start_time, item.end_time
+                            );
+                            wallpaper_url_to_set = Some(item.url.clone());
+                            break;
+                        }
                     }
                 }
             }
         }
     }
 
+    // 如果没有特定日期壁纸和计划壁纸，则使用星期壁纸
     if wallpaper_url_to_set.is_none() {
         info!("noplan use{} ", day_str);
         wallpaper_url_to_set = config.wallpapers.get(&day_str).cloned();
@@ -139,3 +156,26 @@ async fn run_wallpaper_logic() -> Result<()> {
     Ok(())
 }
 
+/// 下载并设置新的壁纸
+async fn set_new_wallpaper(app_dir: &std::path::PathBuf, url: &str) -> Result<()> {
+    let hash = {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        url.hash(&mut hasher);
+        hasher.finish()
+    };
+    let extension = url.split('.').last().unwrap_or("jpg");
+    let file_name = format!("{}.{}", hash, extension);
+    let dest_path = app_dir.join(&file_name);
+
+    if !dest_path.exists() {
+        info!("正在下载: {}", url);
+        download_file(url, &dest_path).await?;
+    }
+
+    info!("正在设置壁纸: {:?}", dest_path);
+    set_wallpaper(&dest_path)?;
+    info!("成功设置壁纸");
+    Ok(())
+}

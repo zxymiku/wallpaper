@@ -1,15 +1,16 @@
 [workspace]
 members = [
     "daily",
-    "windowsperson",
-    "windowsservicemanger",
-    "shared",
+    "manager",
+    "config_creator",
 ]
 resolver = "2"
 
+
 [profile.release]
-panic = "abort"
+opt-level = 'z'
 lto = true
 codegen-units = 1
-strip = true
-opt-level = "z" 
+panic = 'abort'
+strip = true 
+

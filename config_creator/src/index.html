@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>config creator</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f7f9; color: #333; margin: 0; padding: 2rem; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1, h2 { color: #2c3e50; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; }
+        input[type="text"], input[type="time"], select { width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+        .dynamic-list .item { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; padding: 10px; background: #f9f9f9; border-radius: 4px; }
+        .dynamic-list .item > * { flex: 1; }
+        button { background-color: #3498db; color: white; border: none; padding: 12px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; transition: background-color 0.3s; }
+        button:hover { background-color: #2980b9; }
+        .btn-add { background-color: #2ecc71; }
+        .btn-add:hover { background-color: #27ae60; }
+        .btn-remove { background-color: #e74c3c; padding: 8px 12px; }
+        .btn-remove:hover { background-color: #c0392b; }
+        .btn-generate { width: 100%; padding: 15px; font-size: 18px; background-color: #16a085; }
+        .btn-generate:hover { background-color: #117a65; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>config creator</h1>
+
+        <div id="form-container">
+            <h2>每周壁纸 (必填)</h2>
+            <div class="form-group" id="days-container">
+                <!-- JS will generate this part -->
+            </div>
+
+            <h2>特定日期壁纸 (可选)</h2>
+            <div id="dates-list" class="dynamic-list"></div>
+            <button id="add-date" class="btn-add">添加特定日期</button>
+
+            <h2>特定时段壁纸 (可选)</h2>
+            <div id="periods-list" class="dynamic-list"></div>
+            <button id="add-period" class="btn-add">添加特定时段</button>
+
+            <br><br>
+            <button id="generate-json" class="btn-generate">生成并下载 config.json</button>
+        </div>
+    </div>
+
+    <template id="date-template">
+        <div class="item">
+            <input type="text" class="date-key" placeholder="MM-DD (例如 10-01)">
+            <input type="text" class="date-url" placeholder="图片 URL">
+            <button class="btn-remove" onclick="this.parentElement.remove()">移除</button>
+        </div>
+    </template>
+    <template id="period-template">
+        <div class="item">
+            <select class="period-day">
+                <option value="monday">周一</option>
+                <option value="tuesday">周二</option>
+                <option value="wednesday">周三</option>
+                <option value="thursday">周四</option>
+                <option value="friday">周五</option>
+                <option value="saturday">周六</option>
+                <option value="sunday">周日</option>
+            </select>
+            <input type="time" class="period-start">
+            <input type="time" class="period-end">
+            <input type="text" class="period-url" placeholder="图片 URL">
+            <button class="btn-remove" onclick="this.parentElement.remove()">移除</button>
+        </div>
+    </template>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+            const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+            const daysContainer = document.getElementById('days-container');
+            days.forEach((day, i) => {
+                daysContainer.innerHTML += `
+                    <div class="form-group">
+                        <label for="day-${day}">${dayNames[i]}</label>
+                        <input type="text" id="day-${day}" data-day="${day}" placeholder="图片 URL">
+                    </div>
+                `;
+            });
+
+            const addDateBtn = document.getElementById('add-date');
+            const datesList = document.getElementById('dates-list');
+            const dateTemplate = document.getElementById('date-template');
+            addDateBtn.addEventListener('click', () => {
+                datesList.append(dateTemplate.content.cloneNode(true));
+            });
+
+            const addPeriodBtn = document.getElementById('add-period');
+            const periodsList = document.getElementById('periods-list');
+            const periodTemplate = document.getElementById('period-template');
+            addPeriodBtn.addEventListener('click', () => {
+                periodsList.append(periodTemplate.content.cloneNode(true));
+            });
+
+            const generateBtn = document.getElementById('generate-json');
+            generateBtn.addEventListener('click', () => {
+                const config = { wallpapers: { days: {}, dates: {}, periods: [] } };
+                
+                // Collect days
+                document.querySelectorAll('#days-container input').forEach(input => {
+                    if (input.value) config.wallpapers.days[input.dataset.day] = input.value;
+                });
+
+                // Collect dates
+                document.querySelectorAll('#dates-list .item').forEach(item => {
+                    const key = item.querySelector('.date-key').value;
+                    const url = item.querySelector('.date-url').value;
+                    if (key && url) config.wallpapers.dates[key] = url;
+                });
+
+                // Collect periods
+                document.querySelectorAll('#periods-list .item').forEach(item => {
+                    const day = item.querySelector('.period-day').value;
+                    const start = item.querySelector('.period-start').value;
+                    const end = item.querySelector('.period-end').value;
+                    const url = item.querySelector('.period-url').value;
+                    if (day && start && end && url) {
+                        config.wallpapers.periods.push({ day, start, end, url });
+                    }
+                });
+
+                const jsonString = JSON.stringify(config, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'config.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+        });
+    </script>
+</body>
+</html>

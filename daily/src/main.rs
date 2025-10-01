@@ -1,181 +1,180 @@
-#![windows_subsystem = "windows"]
-use anyhow::Result;
-use chrono::{Datelike, Local, NaiveDateTime, NaiveTime, Timelike};
-use log::{error, info, warn};
+// main1.rs (daily/src/main.rs)
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+use anyhow::{Context, Result};
+use chrono::{Datelike, Local, NaiveTime, Weekday};
+use hex;
+use once_cell::sync::Lazy;
+use reqwest::Client;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tokio::{fs, time};
-use shared::*;
+use tokio::time;
+use wallpaper;
+use winreg::enums::*;
+use winreg::RegKey;
 
-#[derive(Deserialize, Debug)]
+const CONFIG_URL: &str = "https://git.zxymiku.top/https://github.com/zxymiku/wallpaper/releases/download/config/config.json";
+const APP_NAME: &str = "DailyWallpaperService";
+const DAILY_CHECK_INTERVAL_HOURS: u64 = 6;
+const FREQUENT_CHECK_INTERVAL_MINS: u64 = 1;
+
+//create http client
+static HTTP_CLIENT: Lazy<Client> = Lazy::new(Client::new);
+
+#[derive(Debug, Deserialize, Clone)]
 struct WallpaperConfig {
-    initial_run_time: Option<String>,
-    wallpapers: HashMap<String, String>,
-    specific_date_wallpapers: Option<HashMap<String, String>>,
-    scheduled_wallpapers: Option<Vec<ScheduledWallpaper>>,
+    wallpapers: Wallpapers,
 }
 
-#[derive(Deserialize, Debug)]
-struct ScheduledWallpaper {
+#[derive(Debug, Deserialize, Clone)]
+struct Wallpapers {
+    days: HashMap<String, String>,
+    dates: HashMap<String, String>,
+    periods: Vec<Period>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct Period {
     day: String,
-    start_time: String,
-    end_time: String,
+    start: String,
+    end: String,
     url: String,
-}
-
-fn get_current_day_str() -> String {
-    use chrono::Weekday::*;
-    match Local::now().weekday() {
-        Mon => "monday", Tue => "tuesday", Wed => "wednesday",
-        Thu => "thursday", Fri => "friday", Sat => "saturday",
-        Sun => "sunday",
-    }.to_string()
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_logging("daily.log").unwrap_or_else(|e| eprintln!("日志初始化失败: {}", e));
-
-    if let Ok(app_dir) = get_app_dir() {
-        let current_exe_path = std::env::current_exe()?;
-        let exe_in_appdata = app_dir.join(DAILY_EXE);
-        if current_exe_path != exe_in_appdata {
-            std::fs::copy(&current_exe_path, &exe_in_appdata)?;
-            run_program_hidden(&exe_in_appdata)?;
-            return Ok(());
-        }
-        set_autostart("SystemWallpaperServiceDaily", &exe_in_appdata).ok();
-        create_scheduled_task("SystemWallpaperServiceDailyTask", exe_in_appdata.to_str().unwrap_or_default()).ok();
+    //clean old config
+    if let Err(e) = setup_and_enforce_policy() {
+        eprintln!("Failed to setup startup or enforce policy: {}", e);
     }
 
-    let mut interval = time::interval(Duration::from_secs(60 * 5));
+    let mut config: Option<WallpaperConfig> = None;
+    let mut config_check_interval = time::interval(Duration::from_secs(DAILY_CHECK_INTERVAL_HOURS * 3600));
+    let mut wallpaper_check_interval = time::interval(Duration::from_secs(FREQUENT_CHECK_INTERVAL_MINS * 60));
+
     loop {
-        interval.tick().await;
-        if let Ok(app_dir) = get_app_dir() {
-            let stop_file = app_dir.join("daily.stop");
-            if stop_file.exists() {
-                if let Ok(content) = fs::read_to_string(&stop_file).await {
-                    if let Ok(resume_ts) = content.trim().parse::<i64>() {
-                        if Local::now().timestamp() < resume_ts {
-                            info!("ready stop{}", NaiveDateTime::from_timestamp_opt(resume_ts, 0).unwrap());
+        tokio::select! {
+            _ = config_check_interval.tick() => {
+                println!("Periodically fetching new config...");
+                match get_config().await {
+                    Ok(new_config) => config = Some(new_config),
+                    Err(e) => eprintln!("Failed to fetch daily config: {}", e),
+                }
+            }
+            _ = wallpaper_check_interval.tick() => {
+                //get config
+                if config.is_none() {
+                     println!("Config not present, fetching for the first time...");
+                     match get_config().await {
+                        Ok(new_config) => config = Some(new_config),
+                        Err(e) => {
+                            eprintln!("Failed to fetch initial config: {}", e);
                             continue;
-                        } else {
-                            warn!("over stop");
-                            fs::remove_file(stop_file).await.ok();
                         }
                     }
                 }
-            }
-        }
-        
-        tokio::spawn(async {
-            guard_process(PERSON_EXE, PERSON_DOWNLOAD_URL).await.ok();
-            guard_process(MANAGER_EXE, MANAGER_DOWNLOAD_URL).await.ok();
-        });
 
-        if let Err(e) = run_wallpaper_logic().await {
-            error!("cloudnt {}", e);
+                if let Some(ref conf) = config {
+                    if let Err(e) = check_and_set_wallpaper(conf).await {
+                         eprintln!("Failed to check and set wallpaper: {}", e);
+                    }
+                }
+            }
         }
     }
 }
 
-async fn run_wallpaper_logic() -> Result<()> {
-    let config: WallpaperConfig = reqwest::get(CONFIG_URL).await?.json().await?;
-    let app_dir = get_app_dir()?;
-    lock_wallpaper_policy()?;
+async fn get_config() -> Result<WallpaperConfig> {
+    let config = HTTP_CLIENT.get(CONFIG_URL).send().await?.json::<WallpaperConfig>().await?;
+    Ok(config)
+}
 
+fn get_current_wallpaper_url(config: &WallpaperConfig) -> Option<String> {
     let now = Local::now();
     let current_time = now.time();
-    let day_str = get_current_day_str();
-    let date_str = now.format("%Y-%m-%d").to_string();
-    
-    let mut wallpaper_url_to_set = None;
-    
-    // 检查是否有特定日期壁纸
-    if let Some(specific_date_wallpapers) = &config.specific_date_wallpapers {
-        if let Some(specific_wallpaper_url) = specific_date_wallpapers.get(&date_str) {
-            info!("使用特定日期壁纸: date={}, url={}", date_str, specific_wallpaper_url);
-            wallpaper_url_to_set = Some(specific_wallpaper_url.clone());
-        }
-    }
-    
-    // 如果没有特定日期壁纸，则检查计划壁纸
-    if wallpaper_url_to_set.is_none() {
-        if let Some(scheduled) = &config.scheduled_wallpapers {
-            for item in scheduled {
-                if item.day == day_str {
-                    if let (Ok(start_time), Ok(end_time)) = (
-                        NaiveTime::parse_from_str(&item.start_time, "%H:%M"),
-                        NaiveTime::parse_from_str(&item.end_time, "%H:%M")
-                    ) {
-                        if current_time >= start_time && current_time < end_time {
-                            info!(
-                                "plan: day={}, time_range={}-{}",
-                                item.day, item.start_time, item.end_time
-                            );
-                            wallpaper_url_to_set = Some(item.url.clone());
-                            break;
-                        }
-                    }
+    let weekday_str = match now.weekday() {
+        Weekday::Mon => "monday",
+        Weekday::Tue => "tuesday",
+        Weekday::Wed => "wednesday",
+        Weekday::Thu => "thursday",
+        Weekday::Fri => "friday",
+        Weekday::Sat => "saturday",
+        Weekday::Sun => "sunday",
+    };
+    let month_day_str = now.format("%m-%d").to_string();
+
+    for period in &config.wallpapers.periods {
+        if period.day == weekday_str {
+            if let (Ok(start), Ok(end)) = (
+                NaiveTime::parse_from_str(&period.start, "%H:%M"),
+                NaiveTime::parse_from_str(&period.end, "%H:%M"),
+            ) {
+                if current_time >= start && current_time <= end {
+                    return Some(period.url.clone());
                 }
             }
         }
     }
 
-    // 如果没有特定日期壁纸和计划壁纸，则使用星期壁纸
-    if wallpaper_url_to_set.is_none() {
-        info!("noplan use{} ", day_str);
-        wallpaper_url_to_set = config.wallpapers.get(&day_str).cloned();
+    if let Some(url) = config.wallpapers.dates.get(&month_day_str) {
+        return Some(url.clone());
     }
 
-    if let Some(url) = wallpaper_url_to_set {
-        let hash = {
-            use std::collections::hash_map::DefaultHasher;
-            use std::hash::{Hash, Hasher};
-            let mut hasher = DefaultHasher::new();
-            url.hash(&mut hasher);
-            hasher.finish()
-        };
-        let extension = url.split('.').last().unwrap_or("jpg");
-        let file_name = format!("{}.{}", hash, extension);
-        let dest_path = app_dir.join(&file_name);
+    config.wallpapers.days.get(weekday_str).cloned()
+}
 
-        if !dest_path.exists() {
-             info!("downloading {}", url);
-             download_file(&url, &dest_path).await?;
+async fn check_and_set_wallpaper(config: &WallpaperConfig) -> Result<()> {
+    if let Some(url) = get_current_wallpaper_url(config) {
+        let image_path = download_image(&url).await?;
+        let image_path_str = image_path.to_str().unwrap_or_default();
+        let current_wallpaper_path = wallpaper::get().unwrap_or_default();
+
+        if current_wallpaper_path != image_path_str {
+            println!("Setting wallpaper to: {}", image_path_str);
+            if let Err(e) = wallpaper::set_from_path(image_path_str) {
+                return Err(anyhow::anyhow!("Failed to set wallpaper from path: {}", e));
+            }
+            if let Err(e) = wallpaper::set_mode(wallpaper::Mode::Stretch) {
+                return Err(anyhow::anyhow!("Failed to set wallpaper mode: {}", e));
+            }
         }
-       
-        info!("setting {:?}", dest_path);
-        set_wallpaper(&dest_path)?;
-        info!("success set wallpaper");
-    } else {
-        warn!("no{}", day_str);
     }
-
     Ok(())
 }
 
-/// 下载并设置新的壁纸
-async fn set_new_wallpaper(app_dir: &std::path::PathBuf, url: &str) -> Result<()> {
-    let hash = {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        let mut hasher = DefaultHasher::new();
-        url.hash(&mut hasher);
-        hasher.finish()
-    };
-    let extension = url.split('.').last().unwrap_or("jpg");
-    let file_name = format!("{}.{}", hash, extension);
-    let dest_path = app_dir.join(&file_name);
-
-    if !dest_path.exists() {
-        info!("正在下载: {}", url);
-        download_file(url, &dest_path).await?;
+async fn download_image(url: &str) -> Result<PathBuf> {
+    let data_dir = dirs::data_dir().context("Could not find data directory")?.join(APP_NAME);
+    if !data_dir.exists() {
+        std::fs::create_dir_all(&data_dir)?;
     }
 
-    info!("正在设置壁纸: {:?}", dest_path);
-    set_wallpaper(&dest_path)?;
-    info!("成功设置壁纸");
+    let mut hasher = Sha256::new();
+    hasher.update(url.as_bytes());
+    let file_name = format!("{}.jpg", hex::encode(hasher.finalize()));
+    let file_path = data_dir.join(file_name);
+
+    if !file_path.exists() {
+        println!("Downloading image from {}", url);
+        let bytes = HTTP_CLIENT.get(url).send().await?.bytes().await?;
+        std::fs::write(&file_path, &bytes)?;
+    }
+
+    Ok(file_path)
+}
+
+fn setup_and_enforce_policy() -> Result<()> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let run_key_path = Path::new("Software").join("Microsoft").join("Windows").join("CurrentVersion").join("Run");
+    let (run_key, _) = hkcu.create_subkey(&run_key_path)?;
+    let current_exe = std::env::current_exe()?;
+    run_key.set_value(APP_NAME, &current_exe.to_str().unwrap_or("").to_string())?;
+    let policy_path = Path::new("Software").join("Microsoft").join("Windows").join("CurrentVersion").join("Policies").join("ActiveDesktop");
+    let (policy_key, _) = hkcu.create_subkey(&policy_path)?;
+    policy_key.set_value("NoChangingWallPaper", &1u32)?;
+    //更激进的设置 暂时不用
+    // key.set_value("Wallpaper", &"C:\\path\\to\\default.jpg".to_string())?;
+    // key.set_value("WallpaperStyle", &"2".to_string())?; // 2 for Stretch
     Ok(())
 }

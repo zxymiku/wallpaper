@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>manager</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        h1, h2 { color: #333; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        #status { color: green; font-weight: bold; margin: 10px 0; }
+        input[type="text"] { padding: 8px; margin: 5px; width: 300px; }
+        textarea { width: 100%; height: 150px; margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; }
+        .api-section { background: white; padding: 15px; border-radius: 4px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>manager</h1>
+    
+    <h2>Server Status</h2>
+    <div id="status">Loading...</div>
+    <button id="enableBtn" onclick="toggleService(true)">启用</button>
+    <button id="disableBtn" onclick="toggleService(false)">禁用</button>
+    
+    <h2>临时更换</h2>
+    <input type="text" id="imageUrl" placeholder="输入图片URL">
+    <button onclick="setWallpaper()">立即更换</button>
+    
+    <h2>日志查看</h2>
+    <textarea id="logs" placeholder="日志内容" readonly></textarea>
+    
+    <div class="api-section">
+        <h2>API 示例</h2>
+        <p>GET: <code>http://127.0.0.1:11452/api/set_wallpaper?url=&lt;图片URL&gt;</code></p>
+        <p>POST: <code>/api/toggle</code> (JSON: <code>{"enabled": true}</code>)</p>
+        <p>GET: <code>/api/status</code></p>
+    </div>
+
+    <script>
+        let enabled = true;
+
+        async function updateStatus() {
+            try {
+                const res = await fetch('/api/status');
+                if (!res.ok) throw new Error('API error');
+                const data = await res.json();
+                document.getElementById('status').innerText = data.process_status;
+                enabled = data.enabled;
+                updateButtons();
+            } catch (e) {
+                document.getElementById('status').innerText = 'Error: ' + e.message;
+                document.getElementById('status').style.color = 'red';
+            }
+        }
+
+        function updateButtons() {
+            document.getElementById('enableBtn').disabled = enabled;
+            document.getElementById('disableBtn').disabled = !enabled;
+        }
+
+        async function toggleService(enable) {
+            try {
+                const res = await fetch('/api/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: enable })
+                });
+                if (!res.ok) throw new Error('Toggle failed');
+                updateStatus();
+                appendLog(`Service ${enable ? 'enabled' : 'disabled'}`);
+            } catch (e) {
+                alert('Toggle error: ' + e.message);
+                appendLog('Toggle error: ' + e.message);
+            }
+        }
+
+        async function setWallpaper() {
+            const url = document.getElementById('imageUrl').value.trim();
+            if (!url) {
+                alert('请输入图片URL');
+                return;
+            }
+            try {
+                const res = await fetch(`/api/set_wallpaper?url=${encodeURIComponent(url)}`);
+                if (!res.ok) throw new Error(await res.text());
+                alert('壁纸更换成功');
+                appendLog(`Wallpaper set from: ${url}`);
+            } catch (e) {
+                alert('Set wallpaper error: ' + e.message);
+                appendLog('Set wallpaper error: ' + e.message);
+            }
+        }
+
+        function appendLog(message) {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleString();
+            logs.value += `[${timestamp}] ${message}\n`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        updateStatus();
+        setInterval(updateStatus, 5000);
+    </script>
+</body>
+</html>

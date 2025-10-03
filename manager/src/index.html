@@ -1,107 +1,1354 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>manager</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-        h1, h2 { color: #333; }
-        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        button:disabled { background: #6c757d; cursor: not-allowed; }
-        #status { color: green; font-weight: bold; margin: 10px 0; }
-        input[type="text"] { padding: 8px; margin: 5px; width: 300px; }
-        textarea { width: 100%; height: 150px; margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; }
-        .api-section { background: white; padding: 15px; border-radius: 4px; margin: 20px 0; }
-    </style>
-</head>
-<body>
-    <h1>manager</h1>
-    
-    <h2>Server Status</h2>
-    <div id="status">Loading...</div>
-    <button id="enableBtn" onclick="toggleService(true)">启用</button>
-    <button id="disableBtn" onclick="toggleService(false)">禁用</button>
-    
-    <h2>临时更换</h2>
-    <input type="text" id="imageUrl" placeholder="输入图片URL">
-    <button onclick="setWallpaper()">立即更换</button>
-    
-    <h2>日志查看</h2>
-    <textarea id="logs" placeholder="日志内容" readonly></textarea>
-    
-    <div class="api-section">
-        <h2>API 示例</h2>
-        <p>GET: <code>http://127.0.0.1:11452/api/set_wallpaper?url=&lt;图片URL&gt;</code></p>
-        <p>POST: <code>/api/toggle</code> (JSON: <code>{"enabled": true}</code>)</p>
-        <p>GET: <code>/api/status</code></p>
-    </div>
-
-    <script>
-        let enabled = true;
-
-        async function updateStatus() {
-            try {
-                const res = await fetch('/api/status');
-                if (!res.ok) throw new Error('API error');
-                const data = await res.json();
-                document.getElementById('status').innerText = data.process_status;
-                enabled = data.enabled;
-                updateButtons();
-            } catch (e) {
-                document.getElementById('status').innerText = 'Error: ' + e.message;
-                document.getElementById('status').style.color = 'red';
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>manager</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
             }
-        }
 
-        function updateButtons() {
-            document.getElementById('enableBtn').disabled = enabled;
-            document.getElementById('disableBtn').disabled = !enabled;
-        }
-
-        async function toggleService(enable) {
-            try {
-                const res = await fetch('/api/toggle', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled: enable })
-                });
-                if (!res.ok) throw new Error('Toggle failed');
-                updateStatus();
-                appendLog(`Service ${enable ? 'enabled' : 'disabled'}`);
-            } catch (e) {
-                alert('Toggle error: ' + e.message);
-                appendLog('Toggle error: ' + e.message);
+            body {
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                padding: 20px;
             }
-        }
 
-        async function setWallpaper() {
-            const url = document.getElementById('imageUrl').value.trim();
-            if (!url) {
-                alert('请输入图片URL');
-                return;
+            .container {
+                max-width: 1000px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+                overflow: hidden;
             }
-            try {
-                const res = await fetch(`/api/set_wallpaper?url=${encodeURIComponent(url)}`);
-                if (!res.ok) throw new Error(await res.text());
-                alert('壁纸更换成功');
-                appendLog(`Wallpaper set from: ${url}`);
-            } catch (e) {
-                alert('Set wallpaper error: ' + e.message);
-                appendLog('Set wallpaper error: ' + e.message);
+
+            header {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 30px;
+                text-align: center;
             }
-        }
 
-        function appendLog(message) {
-            const logs = document.getElementById('logs');
-            const timestamp = new Date().toLocaleString();
-            logs.value += `[${timestamp}] ${message}\n`;
-            logs.scrollTop = logs.scrollHeight;
-        }
+            header h1 {
+                font-size: 28px;
+                margin-bottom: 10px;
+            }
 
-        updateStatus();
-        setInterval(updateStatus, 5000);
-    </script>
-</body>
+            header p {
+                font-size: 14px;
+                opacity: 0.9;
+            }
+
+            .content {
+                padding: 30px;
+            }
+
+            .section {
+                background: #f8f9fa;
+                padding: 20px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+            }
+
+            .section h2 {
+                color: #333;
+                font-size: 20px;
+                margin-bottom: 15px;
+                padding-bottom: 10px;
+                border-bottom: 2px solid #667eea;
+            }
+
+            .status-box {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                background: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                margin-bottom: 15px;
+            }
+
+            .status-text {
+                font-size: 16px;
+                font-weight: bold;
+            }
+
+            .status-text.running {
+                color: #28a745;
+            }
+
+            .status-text.stopped {
+                color: #dc3545;
+            }
+
+            .status-text.disabled {
+                color: #6c757d;
+            }
+
+            .button-group {
+                display: flex;
+                gap: 10px;
+            }
+
+            button {
+                padding: 10px 20px;
+                background: #667eea;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 500;
+                transition: all 0.3s ease;
+            }
+
+            button:hover {
+                background: #5568d3;
+                transform: translateY(-2px);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            }
+
+            button:active {
+                transform: translateY(0);
+            }
+
+            button:disabled {
+                background: #ccc;
+                cursor: not-allowed;
+                transform: none;
+            }
+
+            button.danger {
+                background: #dc3545;
+            }
+
+            button.danger:hover {
+                background: #c82333;
+            }
+
+            button.success {
+                background: #28a745;
+            }
+
+            button.success:hover {
+                background: #218838;
+            }
+
+            .input-group {
+                display: flex;
+                gap: 10px;
+                margin-top: 10px;
+            }
+
+            input[type="text"] {
+                flex: 1;
+                padding: 10px 15px;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                font-size: 14px;
+                transition: border-color 0.3s ease;
+            }
+
+            input[type="text"]:focus {
+                outline: none;
+                border-color: #667eea;
+            }
+
+            .log-controls {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 15px;
+                align-items: center;
+            }
+
+            .log-controls label {
+                font-weight: 500;
+                color: #555;
+            }
+
+            select {
+                padding: 8px 15px;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                font-size: 14px;
+                cursor: pointer;
+                background: white;
+                transition: border-color 0.3s ease;
+            }
+
+            select:focus {
+                outline: none;
+                border-color: #667eea;
+            }
+
+            .log-container {
+                background: #1e1e1e;
+                border-radius: 8px;
+                padding: 15px;
+                max-height: 400px;
+                overflow-y: auto;
+            }
+
+            .log-content {
+                color: #d4d4d4;
+                font-family: "Consolas", "Monaco", "Courier New", monospace;
+                font-size: 13px;
+                line-height: 1.6;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+            }
+
+            .log-container::-webkit-scrollbar {
+                width: 10px;
+            }
+
+            .log-container::-webkit-scrollbar-track {
+                background: #2d2d2d;
+                border-radius: 8px;
+            }
+
+            .log-container::-webkit-scrollbar-thumb {
+                background: #555;
+                border-radius: 8px;
+            }
+
+            .log-container::-webkit-scrollbar-thumb:hover {
+                background: #777;
+            }
+
+            .log-empty {
+                color: #888;
+                text-align: center;
+                padding: 30px;
+                font-style: italic;
+            }
+
+            .api-info {
+                background: white;
+                padding: 15px;
+                border-radius: 8px;
+                border-left: 4px solid #667eea;
+            }
+
+            .api-info h3 {
+                color: #333;
+                font-size: 16px;
+                margin-bottom: 10px;
+            }
+
+            .api-info code {
+                background: #f4f4f4;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-family: "Consolas", "Monaco", "Courier New", monospace;
+                font-size: 13px;
+                color: #d63384;
+            }
+
+            .api-info p {
+                margin: 8px 0;
+                color: #555;
+                font-size: 14px;
+            }
+
+            .loading {
+                display: inline-block;
+                width: 16px;
+                height: 16px;
+                border: 3px solid rgba(255, 255, 255, 0.3);
+                border-radius: 50%;
+                border-top-color: white;
+                animation: spin 1s ease-in-out infinite;
+                margin-left: 10px;
+            }
+
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
+            .refresh-indicator {
+                font-size: 12px;
+                color: #888;
+                margin-top: 10px;
+                text-align: right;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>manager</h1>
+                <p>manage wallpaper</p>
+            </header>
+
+            <div class="content">
+                <!-- Service Status -->
+                <div class="section">
+                    <h2>server core status</h2>
+                    <div class="status-box">
+                        <div>
+                            <span class="status-text" id="statusText"
+                                >加载中...</span
+                            >
+                        </div>
+                        <div class="button-group">
+                            <button
+                                id="enableBtn"
+                                class="success"
+                                onclick="toggleService(true)"
+                            >
+                                启用服务
+                            </button>
+                            <button
+                                id="disableBtn"
+                                class="danger"
+                                onclick="toggleService(false)"
+                            >
+                                禁用服务
+                            </button>
+                        </div>
+                    </div>
+                    <div class="refresh-indicator" id="refreshIndicator">
+                        下次刷新: --
+                    </div>
+                </div>
+
+                <!-- Set Wallpaper Section -->
+                <div class="section">
+                    <h2>临时设置</h2>
+                    <p
+                        style="
+                            color: #666;
+                            margin-bottom: 10px;
+                            font-size: 14px;
+                        "
+                    >
+                        输入图片 URL 立即更换壁纸
+                    </p>
+                    <div class="input-group">
+                        <input
+                            type="text"
+                            id="imageUrl"
+                            placeholder="https://example.com/wallpaper.jpg"
+                        />
+                        <button onclick="setWallpaper()">立即更换</button>
+                    </div>
+                </div>
+
+                <!-- Logs Section -->
+                <div class="section">
+                    <h2>日志查看</h2>
+                    <div class="log-controls">
+                        <label for="logSelector">选择程序:</label>
+                        <select id="logSelector" onchange="loadLogs()">
+                            <option value="manager">Manager 日志</option>
+                            <option value="daily">Daily 日志</option>
+                        </select>
+                        <button onclick="loadLogs()">🔄 刷新日志</button>
+                        <button onclick="clearLogDisplay()">🗑️ 清空显示</button>
+                    </div>
+                    <div class="log-container">
+                        <div class="log-content" id="logContent">
+                            <div class="log-empty">
+                                点击"刷新日志"加载日志内容
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Config Management Section -->
+                <div class="section">
+                    <h2>配置文件管理</h2>
+                    <div style="margin-bottom: 20px">
+                        <h3
+                            style="
+                                color: #555;
+                                font-size: 16px;
+                                margin-bottom: 10px;
+                            "
+                        >
+                            远程配置管理
+                        </h3>
+                        <p
+                            style="
+                                color: #666;
+                                margin-bottom: 10px;
+                                font-size: 14px;
+                            "
+                        >
+                            立即从远程 URL 下载最新配置文件
+                        </p>
+                        <button
+                            onclick="forceDownloadConfig()"
+                            style="width: 200px"
+                        >
+                            ⬇️ 立即下载远程配置
+                        </button>
+                    </div>
+
+                    <div
+                        style="
+                            margin-bottom: 20px;
+                            padding-top: 20px;
+                            border-top: 2px solid #e0e0e0;
+                        "
+                    >
+                        <h3
+                            style="
+                                color: #555;
+                                font-size: 16px;
+                                margin-bottom: 10px;
+                            "
+                        >
+                            本地配置管理
+                        </h3>
+                        <p
+                            style="
+                                color: #666;
+                                margin-bottom: 10px;
+                                font-size: 14px;
+                            "
+                        >
+                            使用自定义 JSON 配置文件
+                        </p>
+
+                        <div style="margin-bottom: 15px">
+                            <label
+                                style="
+                                    display: block;
+                                    margin-bottom: 5px;
+                                    font-weight: 500;
+                                    color: #555;
+                                "
+                            >
+                                上传 JSON 文件
+                            </label>
+                            <input
+                                type="file"
+                                id="configFileInput"
+                                accept=".json"
+                                style="
+                                    margin-bottom: 10px;
+                                    padding: 8px;
+                                    border: 2px solid #e0e0e0;
+                                    border-radius: 6px;
+                                "
+                                onchange="handleConfigFileUpload(event)"
+                            />
+                            <textarea
+                                id="localConfigContent"
+                                placeholder='{"wallpapers": {"days": {}, "dates": {}, "periods": []}}'
+                                style="
+                                    width: 100%;
+                                    min-height: 200px;
+                                    padding: 10px;
+                                    border: 2px solid #e0e0e0;
+                                    border-radius: 6px;
+                                    font-family:
+                                        &quot;Consolas&quot;, monospace;
+                                    font-size: 13px;
+                                    resize: vertical;
+                                "
+                            ></textarea>
+                        </div>
+
+                        <div style="margin-bottom: 15px">
+                            <label
+                                style="
+                                    display: block;
+                                    margin-bottom: 5px;
+                                    font-weight: 500;
+                                    color: #555;
+                                "
+                            >
+                                截止日期
+                            </label>
+                            <div
+                                style="
+                                    display: flex;
+                                    gap: 10px;
+                                    align-items: center;
+                                "
+                            >
+                                <input
+                                    type="date"
+                                    id="expireDate"
+                                    style="
+                                        padding: 10px;
+                                        border: 2px solid #e0e0e0;
+                                        border-radius: 6px;
+                                        font-size: 14px;
+                                    "
+                                />
+                                <span style="color: #666; font-size: 14px">
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="button-group">
+                            <button onclick="setLocalConfig()" class="success">
+                                ✓ 应用本地配置
+                            </button>
+                            <button onclick="clearLocalConfigForm()">
+                                🗑️ 清空表单
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Config Viewer Section -->
+                <div class="section">
+                    <h2>配置文件查看</h2>
+                    <p
+                        style="
+                            color: #666;
+                            margin-bottom: 10px;
+                            font-size: 14px;
+                        "
+                    >
+                        查看 Daily 程序当前使用的配置文件
+                    </p>
+                    <div class="log-controls">
+                        <button onclick="loadConfig()">🔄 刷新配置</button>
+                        <button onclick="clearConfigDisplay()">
+                            🗑️ 清空显示
+                        </button>
+                    </div>
+                    <div class="log-container">
+                        <div class="log-content" id="configContent">
+                            <div class="log-empty">
+                                点击"刷新配置"加载配置文件内容
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API Documentation Section -->
+                <div class="section">
+                    <h2>api接口</h2>
+
+                    <!-- Status API -->
+                    <div class="api-info" style="margin-bottom: 20px">
+                        <h3>📊 获取服务状态</h3>
+                        <p><strong>GET</strong> <code>/api/status</code></p>
+                        <p style="margin: 10px 0; color: #666">
+                            获取 Daily 服务的当前运行状态
+                        </p>
+
+                        <details style="margin-top: 10px">
+                            <summary
+                                style="
+                                    cursor: pointer;
+                                    font-weight: 500;
+                                    color: #667eea;
+                                "
+                            >
+                                show details
+                            </summary>
+                            <div
+                                style="
+                                    margin-top: 10px;
+                                    padding: 10px;
+                                    background: #f8f9fa;
+                                    border-radius: 6px;
+                                "
+                            >
+                                <p><strong>使用 curl：</strong></p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+curl http://127.0.0.1:11452/api/status</pre
+                                >
+
+                                <p style="margin-top: 15px">
+                                    <strong>使用 PowerShell：</strong>
+                                </p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+Invoke-RestMethod -Uri "http://127.0.0.1:11452/api/status"</pre
+                                >
+
+                                <p style="margin-top: 15px">
+                                    <strong>响应示例：</strong>
+                                </p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+{
+  "enabled": true,
+  "process_status": "running"
+}</pre
+                                >
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- Toggle API -->
+                    <div class="api-info" style="margin-bottom: 20px">
+                        <h3>🔄 启用/禁用服务</h3>
+                        <p>
+                            <strong>POST</strong>
+                            <code>/api/toggle?enabled=true</code>
+                        </p>
+                        <p style="margin: 10px 0; color: #666">
+                            控制 Daily 服务的启用或禁用状态
+                        </p>
+
+                        <details style="margin-top: 10px">
+                            <summary
+                                style="
+                                    cursor: pointer;
+                                    font-weight: 500;
+                                    color: #667eea;
+                                "
+                            >
+                                show details
+                            </summary>
+                            <div
+                                style="
+                                    margin-top: 10px;
+                                    padding: 10px;
+                                    background: #f8f9fa;
+                                    border-radius: 6px;
+                                "
+                            >
+                                <p><strong>启用服务 - curl：</strong></p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+curl -X POST "http://127.0.0.1:11452/api/toggle?enabled=true"</pre
+                                >
+
+                                <p style="margin-top: 15px">
+                                    <strong>禁用服务 - curl：</strong>
+                                </p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+curl -X POST "http://127.0.0.1:11452/api/toggle?enabled=false"</pre
+                                >
+
+                                <p style="margin-top: 15px">
+                                    <strong>使用 PowerShell：</strong>
+                                </p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+Invoke-RestMethod -Uri "http://127.0.0.1:11452/api/toggle?enabled=true" -Method POST</pre
+                                >
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- Set Wallpaper API -->
+                    <div class="api-info" style="margin-bottom: 20px">
+                        <h3>临时设置壁纸</h3>
+                        <p>
+                            <strong>POST</strong>
+                            <code>/api/set_wallpaper?url=&lt;图片URL&gt;</code>
+                        </p>
+                        <p style="margin: 10px 0; color: #666">
+                            从指定 URL 下载图片并立即设置为桌面壁纸
+                        </p>
+
+                        <details style="margin-top: 10px">
+                            <summary
+                                style="
+                                    cursor: pointer;
+                                    font-weight: 500;
+                                    color: #667eea;
+                                "
+                            >
+                                show detail
+                            </summary>
+                            <div
+                                style="
+                                    margin-top: 10px;
+                                    padding: 10px;
+                                    background: #f8f9fa;
+                                    border-radius: 6px;
+                                "
+                            >
+                                <p><strong>使用 curl：</strong></p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+curl -X POST "http://127.0.0.1:11452/api/set_wallpaper?url=https://example.com/wallpaper.jpg"</pre
+                                >
+
+                                <p style="margin-top: 15px">
+                                    <strong>使用 PowerShell：</strong>
+                                </p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+$url = "https://example.com/wallpaper.jpg"
+Invoke-RestMethod -Uri "http://127.0.0.1:11452/api/set_wallpaper?url=$url" -Method POST</pre
+                                >
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- Get Logs API -->
+                    <div class="api-info" style="margin-bottom: 20px">
+                        <h3>获取日志</h3>
+                        <p>
+                            <strong>GET</strong>
+                            <code>/api/logs/manager</code> 或
+                            <code>/api/logs/daily</code>
+                        </p>
+                        <p style="margin: 10px 0; color: #666">
+                            获取 Manager 或 Daily 程序的日志内容
+                        </p>
+
+                        <details style="margin-top: 10px">
+                            <summary
+                                style="
+                                    cursor: pointer;
+                                    font-weight: 500;
+                                    color: #667eea;
+                                "
+                            >
+                                show detail
+                            </summary>
+                            <div
+                                style="
+                                    margin-top: 10px;
+                                    padding: 10px;
+                                    background: #f8f9fa;
+                                    border-radius: 6px;
+                                "
+                            >
+                                <p>
+                                    <strong>获取 Manager 日志 - curl：</strong>
+                                </p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+curl http://127.0.0.1:11452/api/logs/manager</pre
+                                >
+
+                                <p style="margin-top: 15px">
+                                    <strong>获取 Daily 日志 - curl：</strong>
+                                </p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+curl http://127.0.0.1:11452/api/logs/daily</pre
+                                >
+
+                                <p style="margin-top: 15px">
+                                    <strong
+                                        >使用 PowerShell 并保存到文件：</strong
+                                    >
+                                </p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+Invoke-RestMethod -Uri "http://127.0.0.1:11452/api/logs/daily" | Out-File daily.log</pre
+                                >
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- Get Config API -->
+                    <div class="api-info" style="margin-bottom: 20px">
+                        <h3>获取配置文件</h3>
+                        <p><strong>GET</strong> <code>/api/config</code></p>
+                        <p style="margin: 10px 0; color: #666">
+                            获取 Daily 当前使用的配置文件内容（JSON 格式）
+                        </p>
+
+                        <details style="margin-top: 10px">
+                            <summary
+                                style="
+                                    cursor: pointer;
+                                    font-weight: 500;
+                                    color: #667eea;
+                                "
+                            >
+                                show details
+                            </summary>
+                            <div
+                                style="
+                                    margin-top: 10px;
+                                    padding: 10px;
+                                    background: #f8f9fa;
+                                    border-radius: 6px;
+                                "
+                            >
+                                <p><strong>使用 curl：</strong></p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+curl http://127.0.0.1:11452/api/config</pre
+                                >
+
+                                <p style="margin-top: 15px">
+                                    <strong
+                                        >使用 PowerShell 并格式化输出：</strong
+                                    >
+                                </p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+Invoke-RestMethod -Uri "http://127.0.0.1:11452/api/config" | ConvertTo-Json -Depth 10</pre
+                                >
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- Force Download Config API -->
+                    <div class="api-info" style="margin-bottom: 20px">
+                        <h3>⬇️ 强制下载配置</h3>
+                        <p>
+                            <strong>POST</strong>
+                            <code>/api/force_download_config</code>
+                        </p>
+                        <p style="margin: 10px 0; color: #666">
+                            立即从远程 URL 下载最新配置文件
+                        </p>
+
+                        <details style="margin-top: 10px">
+                            <summary
+                                style="
+                                    cursor: pointer;
+                                    font-weight: 500;
+                                    color: #667eea;
+                                "
+                            >
+                                show details
+                            </summary>
+                            <div
+                                style="
+                                    margin-top: 10px;
+                                    padding: 10px;
+                                    background: #f8f9fa;
+                                    border-radius: 6px;
+                                "
+                            >
+                                <p><strong>使用 curl：</strong></p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+curl -X POST http://127.0.0.1:11452/api/force_download_config</pre
+                                >
+
+                                <p style="margin-top: 15px">
+                                    <strong>使用 PowerShell：</strong>
+                                </p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+Invoke-RestMethod -Uri "http://127.0.0.1:11452/api/force_download_config" -Method POST</pre
+                                >
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- Set Local Config API -->
+                    <div class="api-info" style="margin-bottom: 20px">
+                        <h3>设置本地配置</h3>
+                        <p>
+                            <strong>POST</strong>
+                            <code>/api/set_local_config</code>
+                        </p>
+                        <p style="margin: 10px 0; color: #666">
+                            设置自定义本地配置文件及截止日期
+                        </p>
+
+                        <details style="margin-top: 10px">
+                            <summary
+                                style="
+                                    cursor: pointer;
+                                    font-weight: 500;
+                                    color: #667eea;
+                                "
+                            >
+                                show details
+                            </summary>
+                            <div
+                                style="
+                                    margin-top: 10px;
+                                    padding: 10px;
+                                    background: #f8f9fa;
+                                    border-radius: 6px;
+                                "
+                            >
+                                <p><strong>使用 curl：</strong></p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+curl -X POST "http://127.0.0.1:11452/api/set_local_config" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "json_content": "{\"wallpapers\":{\"days\":{},\"dates\":{},\"periods\":[]}}",
+    "expire_date": "2024-12-31"
+  }'</pre
+                                >
+
+                                <p style="margin-top: 15px">
+                                    <strong>使用 PowerShell：</strong>
+                                </p>
+                                <pre
+                                    style="
+                                        background: #2d2d2d;
+                                        color: #d4d4d4;
+                                        padding: 10px;
+                                        border-radius: 4px;
+                                        overflow-x: auto;
+                                    "
+                                >
+$body = @{
+    json_content = '{"wallpapers":{"days":{},"dates":{},"periods":[]}}'
+    expire_date = "2024-12-31"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://127.0.0.1:11452/api/set_local_config" `
+    -Method POST -Body $body -ContentType "application/json"</pre
+                                >
+                            </div>
+                        </details>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            let enabled = true;
+            let countdown = 5;
+            let countdownInterval = null;
+
+            // Update status from API
+            async function updateStatus() {
+                try {
+                    const res = await fetch("/api/status");
+                    if (!res.ok) throw new Error("API error");
+                    const data = await res.json();
+
+                    const statusText = document.getElementById("statusText");
+                    statusText.innerText = data.process_status;
+
+                    // Update status color
+                    statusText.className = "status-text";
+                    if (data.process_status.includes("运行中")) {
+                        statusText.classList.add("running");
+                    } else if (data.process_status.includes("已禁用")) {
+                        statusText.classList.add("disabled");
+                    } else {
+                        statusText.classList.add("stopped");
+                    }
+
+                    enabled = data.enabled;
+                    updateButtons();
+                } catch (e) {
+                    const statusText = document.getElementById("statusText");
+                    statusText.innerText = "错误: " + e.message;
+                    statusText.className = "status-text stopped";
+                }
+
+                resetCountdown();
+            }
+
+            // Update button states
+            function updateButtons() {
+                document.getElementById("enableBtn").disabled = enabled;
+                document.getElementById("disableBtn").disabled = !enabled;
+            }
+
+            // Toggle service on/off
+            async function toggleService(enable) {
+                try {
+                    const res = await fetch("/api/toggle", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ enabled: enable }),
+                    });
+                    if (!res.ok) throw new Error(await res.text());
+
+                    await updateStatus();
+                    showNotification(
+                        `服务已${enable ? "启用" : "禁用"}`,
+                        "success",
+                    );
+                } catch (e) {
+                    showNotification("操作失败: " + e.message, "error");
+                }
+            }
+
+            // Set wallpaper from URL
+            async function setWallpaper() {
+                const url = document.getElementById("imageUrl").value.trim();
+                if (!url) {
+                    showNotification("请输入图片 URL", "error");
+                    return;
+                }
+
+                try {
+                    const res = await fetch(
+                        `/api/set_wallpaper?url=${encodeURIComponent(url)}`,
+                        {
+                            method: "POST",
+                        },
+                    );
+                    if (!res.ok) throw new Error(await res.text());
+
+                    showNotification("壁纸更换成功", "success");
+                    document.getElementById("imageUrl").value = "";
+                } catch (e) {
+                    showNotification("更换壁纸失败: " + e.message, "error");
+                }
+            }
+
+            // Load logs for selected program
+            async function loadLogs() {
+                const program = document.getElementById("logSelector").value;
+                const logContent = document.getElementById("logContent");
+
+                logContent.innerHTML =
+                    '<div class="log-empty">正在加载日志...</div>';
+
+                try {
+                    const res = await fetch(`/api/logs/${program}`);
+                    if (!res.ok) {
+                        if (res.status === 404) {
+                            throw new Error("日志文件不存在");
+                        }
+                        throw new Error(await res.text());
+                    }
+
+                    const content = await res.text();
+                    if (content.trim() === "") {
+                        logContent.innerHTML =
+                            '<div class="log-empty">日志文件为空</div>';
+                    } else {
+                        logContent.textContent = content;
+                    }
+
+                    // Auto scroll to bottom
+                    const container = logContent.parentElement;
+                    container.scrollTop = container.scrollHeight;
+                } catch (e) {
+                    logContent.innerHTML = `<div class="log-empty" style="color: #dc3545;">加载失败: ${e.message}</div>`;
+                }
+            }
+
+            // Clear log display
+            function clearLogDisplay() {
+                const logContent = document.getElementById("logContent");
+                logContent.innerHTML =
+                    '<div class="log-empty">日志显示已清空</div>';
+            }
+
+            // Load config file
+            async function loadConfig() {
+                const configContent = document.getElementById("configContent");
+
+                configContent.innerHTML =
+                    '<div class="log-empty">正在加载配置文件...</div>';
+
+                try {
+                    const res = await fetch(`/api/config`);
+                    if (!res.ok) {
+                        if (res.status === 404) {
+                            throw new Error("配置文件不存在或尚未下载");
+                        }
+                        throw new Error(await res.text());
+                    }
+
+                    const content = await res.text();
+                    if (content.trim() === "") {
+                        configContent.innerHTML =
+                            '<div class="log-empty">配置文件为空</div>';
+                    } else {
+                        // Format JSON for better display
+                        try {
+                            const jsonObj = JSON.parse(content);
+                            configContent.textContent = JSON.stringify(
+                                jsonObj,
+                                null,
+                                2,
+                            );
+                        } catch {
+                            configContent.textContent = content;
+                        }
+                    }
+
+                    // Auto scroll to top for config
+                    const container = configContent.parentElement;
+                    container.scrollTop = 0;
+                } catch (e) {
+                    configContent.innerHTML = `<div class="log-empty" style="color: #dc3545;">加载失败: ${e.message}</div>`;
+                }
+            }
+
+            // Clear config display
+            function clearConfigDisplay() {
+                const configContent = document.getElementById("configContent");
+                configContent.innerHTML =
+                    '<div class="log-empty">配置显示已清空</div>';
+            }
+
+            // Show notification (simple alert replacement)
+            function showNotification(message, type) {
+                // You can replace this with a better notification UI
+                alert(message);
+            }
+
+            // Countdown for next refresh
+            function resetCountdown() {
+                countdown = 5;
+                if (countdownInterval) {
+                    clearInterval(countdownInterval);
+                }
+
+                countdownInterval = setInterval(() => {
+                    countdown--;
+                    document.getElementById("refreshIndicator").textContent =
+                        `下次刷新: ${countdown}秒`;
+
+                    if (countdown <= 0) {
+                        clearInterval(countdownInterval);
+                    }
+                }, 1000);
+            }
+
+            // Initialize
+            updateStatus();
+            setInterval(updateStatus, 5000);
+
+            // Force download config from remote
+            async function forceDownloadConfig() {
+                if (!confirm("确定要立即从远程 URL 下载配置文件吗？")) {
+                    return;
+                }
+
+                try {
+                    const res = await fetch("/api/force_download_config", {
+                        method: "POST",
+                    });
+                    if (!res.ok) throw new Error(await res.text());
+
+                    showNotification(
+                        "配置下载已安排，请稍候查看日志",
+                        "success",
+                    );
+
+                    // Refresh config display after a delay
+                    setTimeout(() => {
+                        loadConfig();
+                    }, 2000);
+                } catch (e) {
+                    showNotification("下载请求失败: " + e.message, "error");
+                }
+            }
+
+            // Handle config file upload
+            async function handleConfigFileUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = async function (e) {
+                    const content = e.target.result;
+
+                    // Validate JSON
+                    try {
+                        JSON.parse(content);
+                        document.getElementById("localConfigContent").value =
+                            content;
+                        showNotification(
+                            "文件加载成功，请设置截止日期后点击应用",
+                            "success",
+                        );
+                    } catch (err) {
+                        showNotification(
+                            "无效的 JSON 文件: " + err.message,
+                            "error",
+                        );
+                    }
+                };
+                reader.readAsText(file);
+            }
+
+            // Set local config with expire date
+            async function setLocalConfig() {
+                const jsonContent = document
+                    .getElementById("localConfigContent")
+                    .value.trim();
+                const expireDate = document.getElementById("expireDate").value;
+
+                if (!jsonContent) {
+                    showNotification("请输入或上传 JSON 配置", "error");
+                    return;
+                }
+
+                if (!expireDate) {
+                    showNotification("请选择截止日期", "error");
+                    return;
+                }
+
+                // Validate JSON
+                try {
+                    JSON.parse(jsonContent);
+                } catch (err) {
+                    showNotification(
+                        "无效的 JSON 格式: " + err.message,
+                        "error",
+                    );
+                    return;
+                }
+
+                try {
+                    const res = await fetch("/api/set_local_config", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            json_content: jsonContent,
+                            expire_date: expireDate,
+                        }),
+                    });
+                    if (!res.ok) throw new Error(await res.text());
+
+                    const message = await res.text();
+                    showNotification(message, "success");
+
+                    // Clear form after success
+                    clearLocalConfigForm();
+
+                    // Refresh config display
+                    setTimeout(() => {
+                        loadConfig();
+                    }, 500);
+                } catch (e) {
+                    showNotification("设置本地配置失败: " + e.message, "error");
+                }
+            }
+
+            // Clear local config form
+            function clearLocalConfigForm() {
+                document.getElementById("localConfigContent").value = "";
+                document.getElementById("expireDate").value = "";
+                document.getElementById("configFileInput").value = "";
+            }
+
+            // Set default expire date to tomorrow
+            function setDefaultExpireDate() {
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const dateStr = tomorrow.toISOString().split("T")[0];
+                document.getElementById("expireDate").value = dateStr;
+            }
+
+            // Load logs when page loads
+            window.addEventListener("load", () => {
+                loadLogs();
+                setDefaultExpireDate();
+            });
+        </script>
+    </body>
 </html>

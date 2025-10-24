@@ -18,7 +18,7 @@ use windows::Win32::System::Threading::{
 };
 
 const UPDATE_EXE_URL: &str = "https://gh-proxy.com/https://github.com/zxymiku/wallpaper/releases/download/config/daily.exe";
-const UPDATE_HASH_URL: &str = "https://example.com/daily.sha256";
+const UPDATE_HASH_URL: &str = "https://gh-proxy.com/https://github.com/zxymiku/wallpaper/releases/download/config/daily.sha256";
 const APP_DIR_NAME: &str = "DailyWallpaper";
 const DAILY_EXE_NAME: &str = "daily.exe";
 const DAILY_PROC_NAME: &str = "daily.exe";

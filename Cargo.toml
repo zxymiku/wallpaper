@@ -1,0 +1,13 @@
+[workspace]
+members = [
+    "daily",
+    "update",
+    "config_creator",
+]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

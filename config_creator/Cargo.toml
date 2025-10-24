@@ -1,0 +1,13 @@
+[package]
+name = "config_creator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = "0.7"
+tower-http = { version = "0.5", features = ["fs"] }
+open = "5"
+
+[build-dependencies]
+winres = "0.1"

@@ -3,6 +3,7 @@ members = [
     "daily",
     "update",
     "config_creator",
+    "daily_web",
 ]
 
 [profile.release]

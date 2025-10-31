@@ -1,67 +1,63 @@
 {
   "wallpapers": {
     "days": {
-      "monday": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/1.jpg",
-      "tuesday": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/2.png",
-      "wednesday": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/3.jpg",
-      "thursday": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/4.jpg",
-      "friday": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/5.jpeg",
-      "saturday": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/7.jpg",
-      "sunday": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/7.jpg"
+      "monday": "special",
+      "tuesday": "https://gh-proxy.com/https://github.com/zxymiku/public-wallpapers/releases/download/3/3.jpg",
+      "wednesday": "https://gh-proxy.com/https://github.com/zxymiku/public-wallpapers/releases/download/Warma%21/1.png",
+      "thursday": "https://gh-proxy.com/https://github.com/zxymiku/public-wallpapers/releases/download/Warma%21/2.jpg",
+      "friday": "https://gh-proxy.com/https://github.com/zxymiku/public-wallpapers/releases/download/4/2.jpg",
+      "saturday": "special",
+      "sunday": "special"
     },
     "dates": {
     },
-    "periods": [
+    "specials": [
     {
       "day": "monday",
       "start": "15:50",
       "end": "17:00",
-      "url": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/special.png"
+      "url": "special"
     },
 
     {
       "day": "tuesday",
       "start": "14:10",
       "end": "15:10",
-      "url": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/special2.jpg"
+      "url": "special"
     },
     {
       "day": "tuesday",
       "start": "20:20",
       "end": "21:20",
-      "url": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/special3.jpg"
+      "url": "special"
     },
     {
       "day": "wednesday",
       "start": "8:00",
       "end": "9:00",
-      "url": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/special4.jpg"
+      "url": "special"
     },
     {
       "day": "wednesday",
       "start": "18:05",
       "end": "20:30",
-      "url": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/special5.jpg"
+      "url": "special"
     },
     {
       "day": "thursday",
       "start": "10:45",
       "end": "11:50",
-      "url": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/special6.jpg"
-    },
-    {
-      "day":"saturday",
-      "start":"2:00",
-      "end":"2:20",
-      "url": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/special7.jpg"
+      "url": "special"
     },
     {
       "day": "friday",
       "start": "15:40",
-      "end": "16:40",
-      "url": "https://git.zxymiku.top/https://github.com/zxymiku/public-wallpapers/releases/download/2/special7.jpg"
+      "end": "17:40",
+      "url": "special"
     }
-    
-    ]
+    ],
+    "special_urls": {
+    "special": "https://gh-proxy.com/https://github.com/zxymiku/wallpaper/releases/download/config/special.html"
+  }
   }
 }

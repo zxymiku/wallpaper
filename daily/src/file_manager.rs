@@ -92,15 +92,14 @@ pub async fn cleanup_loop(state: Arc<AppState>, config_url: &str) {
                 }
             }
         }
-
         let current_url = state.current_wallpaper_url.lock().await.clone();
-        let current_filename = if !current_url.is_empty() {
-            Some(wallpaper_url_to_path(&state.app_data_dir, &current_url).file_name().map(|s| s.to_os_string()))
-                .flatten()
+        let current_filename = if !current_url.is_empty() && !current_url.starts_with("special") {
+        wallpaper_url_to_path(&state.app_data_dir, &current_url)
+            .file_name()
+            .map(|s| s.to_os_string())
         } else {
             None
         };
-
         let wallpaper_dir = state.app_data_dir.join("wallpapers");
         if let Ok(mut entries) = fs::read_dir(wallpaper_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {

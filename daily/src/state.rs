@@ -15,4 +15,5 @@ pub struct AppState {
     pub current_wallpaper_url: Mutex<String>,
     pub app_data_dir: PathBuf,
     pub wallpaper_notify: Notify,
+    pub web_wallpaper_pid: Mutex<Option<u32>>,
 }

@@ -63,7 +63,7 @@ async fn update_loop(app_data_dir: &Path) {
                 error!("Failed to check for updates: {}", e);
             }
         }
-        sleep(Duration::from_secs(60 * 60 * 4)).await;
+        sleep(Duration::from_secs(60 * 60 * 16)).await;
     }
 }
 async fn check_for_updates(client: &Client, local_path: &Path) -> Result<bool, String> {
@@ -76,7 +76,7 @@ async fn check_for_updates(client: &Client, local_path: &Path) -> Result<bool, S
         .await
         .map_err(|e| e.to_string())?
         .trim()
-        .to_lowercase(); //
+        .to_lowercase(); 
 
     if remote_hash.is_empty() {
         return Err("Remote hash is empty".to_string());

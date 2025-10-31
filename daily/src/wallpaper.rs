@@ -4,9 +4,11 @@ use crate::state::AppState;
 use chrono::{Local, NaiveTime, Datelike, Weekday};
 use log::{debug, error, info, warn};
 use reqwest::Client;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
+use sysinfo::{Pid, System};
 use tokio::select;
 use tokio::time::sleep;
 use windows::Win32::System::Com;
@@ -16,6 +18,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 pub async fn wallpaper_loop(state: Arc<AppState>) {
     let client = Client::new();
+    let mut sys = System::new_all();
     unsafe {
         if Com::CoInitializeEx(None, Com::COINIT_APARTMENTTHREADED).is_err() {
             error!("Failed to initialize COM");
@@ -23,8 +26,8 @@ pub async fn wallpaper_loop(state: Arc<AppState>) {
         }
     }
 
-    loop {
-        let (target_url, is_temp) = match determine_target_url(&state).await {
+loop {
+        let (target_url_id, is_temp) = match determine_target_url(&state).await {
             Some(url) => url,
             None => {
                 warn!("Could not determine target wallpaper. Config may be missing.");
@@ -32,33 +35,54 @@ pub async fn wallpaper_loop(state: Arc<AppState>) {
                 continue;
             }
         };
-
+        let is_special = target_url_id.starts_with("special") || target_url_id.ends_with(".html");
         let mut current_url_lock = state.current_wallpaper_url.lock().await;
+        let mut pid_lock = state.web_wallpaper_pid.lock().await;
+        if *current_url_lock != target_url_id {
+            info!("Wallpaper change requested: {} -> {}", *current_url_lock, target_url_id);
+            if is_special {
+                let html_url = match resolve_special_url(&state, &target_url_id).await {
+                    Some(url) => url,
+                    None => {
+                        error!("Could not resolve special URL for '{}'", target_url_id);
+                        continue;
+                    }
+                };
+                kill_web_wallpaper(&mut sys, &mut pid_lock);
+                info!("Launching web wallpaper: {}", html_url);
+                if let Err(e) = launch_web_wallpaper(&mut pid_lock, &html_url) {
+                    error!("Failed to launch daily_web.exe: {}", e);
+                } else {
+                    *current_url_lock = target_url_id;
+                }
 
-        if *current_url_lock != target_url {
-            info!("New wallpaper target determined: {}", target_url);
-            let image_path = wallpaper_url_to_path(&state.app_data_dir, &target_url);
-            match download_file(&client, &target_url, &image_path).await {
-                Ok(_) => {
-                    info!("Setting wallpaper to: {:?}", image_path);
-                    if let Err(e) = set_wallpaper(&image_path) {
-                        error!("Failed to set wallpaper: {}", e);
-                    } else {
-                        if let Err(e) = set_wallpaper_lock(true) {
-                            error!("Failed to lock wallpaper setting: {}", e);
+            } else {
+                if pid_lock.is_some() {
+                    info!("Terminating web wallpaper process...");
+                    kill_web_wallpaper(&mut sys, &mut pid_lock);
+                    *pid_lock = None;
+                }
+                info!("Setting image wallpaper: {}", target_url_id);
+                let image_path = wallpaper_url_to_path(&state.app_data_dir, &target_url_id);
+                match download_file(&client, &target_url_id, &image_path).await {
+                    Ok(_) => {
+                        if let Err(e) = set_wallpaper_image(Some(&image_path)) {
+                            error!("Failed to set image wallpaper: {}", e);
+                        } else {
+                            set_wallpaper_lock(true).ok();
+                            *current_url_lock = target_url_id;
+                            info!("Image wallpaper change successful.");
                         }
-                        *current_url_lock = target_url;
-                        info!("Wallpaper change successful.");
+                    }
+                    Err(e) => {
+                        error!("Failed to download wallpaper {}: {}", target_url_id, e);
                     }
                 }
-                Err(e) => {
-                    error!("Failed to download wallpaper {}: {}", target_url, e);
-                }
             }
-        } else {
-            debug!("Wallpaper is up to date.");
         }
+
         drop(current_url_lock);
+        drop(pid_lock);
         let wait_duration = if is_temp {
             if let Some(temp) = state.temp_wallpaper.lock().await.clone() {
                 let duration = temp.expiry - Local::now();
@@ -71,6 +95,80 @@ pub async fn wallpaper_loop(state: Arc<AppState>) {
         };
         
         wait_for_next_check(&state, wait_duration).await;
+    }
+}
+async fn resolve_special_url(state: &Arc<AppState>, url_id: &str) -> Option<String> {
+    if url_id.ends_with(".html") {
+        return Some(url_id.to_string());
+    }
+    let config_lock = state.config.lock().await;
+    config_lock.as_ref()
+        .and_then(|c| c.special_urls.get(url_id))
+        .cloned()
+}
+fn launch_web_wallpaper(pid_lock: &mut Option<u32>, url: &str) -> Result<(), String> {
+    let mut exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
+    exe_path.pop();
+    exe_path.push("daily_web.exe");
+
+    if !exe_path.exists() {
+        warn!("daily_web.exe not found at {}", exe_path.display());
+        // On Windows prefer APPDATA location for packaged `daily_web.exe`
+        let app_data_path = std::env::var("APPDATA")
+            .map(PathBuf::from)
+            .map(|p| p.join("DailyWallpaper").join("daily_web.exe"))
+            .map_err(|e| e.to_string())?;
+        
+        if !app_data_path.exists() {
+             return Err(format!("daily_web.exe not found at {} or {}", exe_path.display(), app_data_path.display()));
+        }
+        exe_path = app_data_path;
+    }
+    let child = Command::new(exe_path)
+        .arg(url)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    
+    *pid_lock = Some(child.id());
+    Ok(())
+}
+fn kill_web_wallpaper(sys: &mut System, pid_lock: &mut Option<u32>) {
+    if let Some(pid_val) = pid_lock {
+        sys.refresh_process(Pid::from(*pid_val as usize));
+        if let Some(process) = sys.process(Pid::from(*pid_val as usize)) {
+            info!("Killing web wallpaper process (PID: {})", pid_val);
+            process.kill();
+        } else {
+            warn!("Web wallpaper process (PID: {}) not found.", pid_val);
+        }
+    }
+    *pid_lock = None;
+}
+fn set_wallpaper_image(path: Option<&Path>) -> Result<(), String> {
+    set_wallpaper_lock(false).map_err(|e| format!("Failed to unlock wallpaper: {}", e))?;
+
+    let path_wide = match path {
+        Some(p) => {
+            let path_str = p.to_str().ok_or("Invalid path string")?;
+            to_wide_string(path_str)
+        },
+        None => {
+            to_wide_string("")
+        }
+    };
+    let result = unsafe {
+        SystemParametersInfoW(
+            SPI_SETDESKWALLPAPER,
+            0,
+            Some(path_wide.as_ptr() as *mut _),
+            SPIF_UPDATEINIFILE | SPIF_SENDCHANGE,
+        )
+    };
+
+    if result.is_ok() {
+        Ok(())
+    } else {
+        Err("SystemParametersInfoW call failed".to_string())
     }
 }
 
@@ -110,7 +208,7 @@ async fn determine_target_url(state: &Arc<AppState>) -> Option<(String, bool)> {
 
     let current_weekday = now.weekday();
     let current_time = now.time();
-    for period in &config.wallpapers.periods { //
+    for period in &config.wallpapers.specials { //
         if weekday_from_str(&period.day) == Some(current_weekday) { //
             if let (Ok(start), Ok(end)) = (
                 NaiveTime::parse_from_str(&period.start, "%H:%M"), //
@@ -154,25 +252,7 @@ fn weekday_from_str(s: &str) -> Option<Weekday> {
     }
 }
 
-fn set_wallpaper(path: &Path) -> Result<(), String> {
-    let path_str = path.to_str().ok_or("Invalid path string")?;
-    let path_wide = to_wide_string(path_str);
-    set_wallpaper_lock(false).map_err(|e| format!("Failed to unlock wallpaper: {}", e))?;
-    let result = unsafe {
-        SystemParametersInfoW(
-            SPI_SETDESKWALLPAPER,
-            0,
-            Some(path_wide.as_ptr() as *mut _),
-            SPIF_UPDATEINIFILE | SPIF_SENDCHANGE,
-        )
-    };
 
-    if result.is_ok() {
-        Ok(())
-    } else {
-        Err("SystemParametersInfoW call failed".to_string())
-    }
-}
 
 fn set_wallpaper_lock(lock: bool) -> Result<(), String> {
     let key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop";

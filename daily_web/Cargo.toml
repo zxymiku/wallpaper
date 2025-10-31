@@ -1,0 +1,15 @@
+[package]
+name = "daily_web"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wry = "0.41"
+url = "2.5"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_LibraryLoader",
+]}

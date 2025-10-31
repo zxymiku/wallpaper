@@ -1,12 +1,7 @@
-// 启动时隐藏控制台窗口
 #![windows_subsystem = "windows"]
-
-// PathBuf not needed here
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
 use log::{error, info};
-
-// 声明模块
 mod autostart;
 mod config;
 mod file_manager;
@@ -36,12 +31,13 @@ async fn main() {
     if let Err(e) = autostart::set_autostart() {
         error!("Failed to set autostart: {}", e);
     }
-    let app_state = Arc::new(AppState {
+let app_state = Arc::new(AppState {
         config: Mutex::new(None),
         temp_wallpaper: Mutex::new(None),
         current_wallpaper_url: Mutex::new(String::new()),
         app_data_dir: app_data_dir.clone(),
         wallpaper_notify: Notify::new(),
+        web_wallpaper_pid: Mutex::new(None),
     });
     let autostart_handle = tokio::spawn(async {
         autostart::check_loop().await;

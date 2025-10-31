@@ -17,6 +17,7 @@ axum = "0.7"
 tower-http = { version = "0.5", features = ["fs"] }
 notify = "6.1"
 sha256 = "1.5"
+sysinfo = "0.30"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
